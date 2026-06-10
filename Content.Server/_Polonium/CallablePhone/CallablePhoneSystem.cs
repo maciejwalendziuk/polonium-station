@@ -178,7 +178,9 @@ public sealed class CallablePhoneSystem : SharedCallablePhoneSystem
         }
 
         LinkHandsetInSlot(entity);
-        UpdatePhoneVisual(entity);
+
+        if (HasComp<AppearanceComponent>(entity))
+            UpdatePhoneVisual(entity);
     }
 
     private void OnShutdown(Entity<CallablePhoneComponent> entity, ref ComponentShutdown args)
