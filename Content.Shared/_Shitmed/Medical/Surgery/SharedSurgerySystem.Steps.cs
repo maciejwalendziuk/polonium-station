@@ -157,8 +157,15 @@ public abstract partial class SharedSurgerySystem
         var healableSeverity = _wounds.GetWoundableSeverityPoint(args.Part, damageGroup: ent.Comp.MainGroup, healable: true);
         var rawDamage = _wounds.GetGroupDamage(args.Part, ent.Comp.MainGroup);
 
+        if (_net.IsServer)
+            Log.Info($"[TendWounds] group={ent.Comp.MainGroup} step on {ToPrettyString(args.Part)} of {ToPrettyString(args.Body)} by {ToPrettyString(args.User)}: healableSeverity={healableSeverity}, rawDamage={rawDamage}, healMult={ent.Comp.HealMultiplier}.");
+
         if (healableSeverity <= 0 && rawDamage <= 0)
+        {
+            if (_net.IsServer)
+                Log.Info($"[TendWounds] group={ent.Comp.MainGroup} on {ToPrettyString(args.Part)}: no-op, nothing healable (healableSeverity and rawDamage both <= 0).");
             return;
+        }
 
         // Right now the bonus is based off the body's total damage, maybe we could make it based off each part in the future.
         var severity = _wounds.GetWoundableSeverityPoint(args.Part, damageGroup: ent.Comp.MainGroup);
@@ -180,13 +187,17 @@ public abstract partial class SharedSurgerySystem
         foreach (var type in group.DamageTypes)
             adjustedDamage.DamageDict[type] -= bonus;
 
+        if (_net.IsServer)
+            Log.Info($"[TendWounds] group={ent.Comp.MainGroup} on {ToPrettyString(args.Part)}: severity={severity}, bonus={bonus}, applying delta={adjustedDamage.GetTotal()} ({string.Join(", ", adjustedDamage.DamageDict.Select(kv => $"{kv.Key}={kv.Value}"))}).");
+
         var ev = new SurgeryStepDamageEvent(args.User, args.Body, args.Part, args.Surgery, adjustedDamage, 0.5f);
         RaiseLocalEvent(args.Body, ref ev);
     }
 
     private bool TendWoundsComplete(SurgeryTendWoundsEffectComponent comp, EntityUid part)
     {
-        return !_wounds.HasDamageOfGroup(part, comp.MainGroup) && _wounds.GetGroupDamage(part, comp.MainGroup) <= 0;
+        return _wounds.GetWoundableSeverityPoint(part, damageGroup: comp.MainGroup, healable: true) <= 0
+            && _wounds.GetGroupDamage(part, comp.MainGroup) <= 0;
     }
 
     private void OnAddPartStep(Entity<SurgeryAddPartStepComponent> ent, ref SurgeryStepEvent args)

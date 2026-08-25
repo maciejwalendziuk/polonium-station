@@ -3,13 +3,16 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+using System.Linq;
 using Content.Shared._Shitmed.Body;
 using Content.Shared._Shitmed.Medical.Surgery.Conditions;
 using Content.Shared._Shitmed.Medical.Surgery.Consciousness.Systems;
 using Content.Shared._Shitmed.Medical.Surgery.Pain.Systems;
 using Content.Shared._Shitmed.Medical.Surgery.Steps;
 using Content.Shared._Shitmed.Medical.Surgery.Steps.Parts;
+using Content.Shared._Shitmed.Medical.Surgery.Traumas;
 using Content.Shared._Shitmed.Medical.Surgery.Traumas.Systems;
+using Content.Shared.Damage.Prototypes;
 using Content.Shared._Shitmed.Medical.Surgery.Wounds.Components;
 using Content.Shared._Shitmed.Medical.Surgery.Wounds.Systems;
 using Content.Shared.Body;
@@ -145,7 +148,7 @@ public abstract partial class SharedSurgerySystem : EntitySystem
             return;
         }
 
-        if (!IsSurgeryValid(ent, target, args.Event.Surgery, args.Event.Step, args.Event.User, out var surgery, out var part, out var _))
+        if (!IsSurgeryValid(ent, target, args.Event.Surgery, args.Event.Step, args.Event.User, out var surgery, out var part, out var _, logFailure: true))
         {
             Log.Warning($"Cancelling surgery doafter mid-way: {args.Event.Surgery}/{args.Event.Step} on {ToPrettyString(target)} of {ToPrettyString(ent)} - IsSurgeryValid failed.");
             args.Cancel();
@@ -260,7 +263,42 @@ public abstract partial class SharedSurgerySystem : EntitySystem
         var rawDamage = point > 0 ? FixedPoint2.Zero : _wounds.GetGroupDamage(args.Part, ent.Comp.DamageGroup);
 
         if (point <= 0 && rawDamage <= 0)
+        {
+            if (HasComp<IncisionOpenComponent>(args.Part))
+                return;
+
+            var reasons = CollectHealBlockReasons(args.Part, partWoundable, ent.Comp.DamageGroup);
+            if (reasons.Count > 0)
+            {
+                foreach (var reason in reasons)
+                    args.AddBlockReason(reason);
+                return;
+            }
+
             args.Cancelled = true;
+        }
+    }
+
+    private List<string> CollectHealBlockReasons(EntityUid part, WoundableComponent? woundable, ProtoId<DamageGroupPrototype> group)
+    {
+        var reasons = new List<string>();
+        foreach (var wound in _wounds.GetWoundableWounds(part, woundable))
+        {
+            if (wound.Comp.IsScar || wound.Comp.DamageGroup != group)
+                continue;
+
+            foreach (var trauma in _trauma.GetAllWoundTraumas(wound))
+            {
+                if (!TraumaSystem.TraumasBlockingHealing.Contains(trauma.Comp.TraumaType))
+                    continue;
+
+                var reason = TraumaBlockReason(trauma.Comp.TraumaType);
+                if (!reasons.Contains(reason))
+                    reasons.Add(reason);
+            }
+        }
+
+        return reasons;
     }
 
     private void OnBodyComponentConditionValid(Entity<SurgeryBodyComponentConditionComponent> ent, ref SurgeryValidEvent args)
@@ -365,11 +403,22 @@ public abstract partial class SharedSurgerySystem : EntitySystem
         if (args.Cancelled)
             return;
 
-        // not inverted = cancel if no trauma present
-        // inverted = cancel if trauma present
-        if (_trauma.HasWoundableTrauma(args.Part, ent.Comp.TraumaType) == ent.Comp.Inverted)
+        if (_trauma.HasWoundableTrauma(args.Part, ent.Comp.TraumaType) != ent.Comp.Inverted)
+            return;
+
+        if (ent.Comp.Inverted)
+            args.AddBlockReason(TraumaBlockReason(ent.Comp.TraumaType));
+        else
             args.Cancelled = true;
     }
+
+    private static string TraumaBlockReason(TraumaType trauma) => trauma switch
+    {
+        TraumaType.BoneDamage => "surgery-blocked-bone",
+        TraumaType.OrganDamage => "surgery-blocked-organ",
+        TraumaType.Dismemberment => "surgery-blocked-dismemberment",
+        _ => "surgery-blocked-generic",
+    };
 
     private void OnBleedsPresentConditionValid(Entity<SurgeryBleedsPresentConditionComponent> ent, ref SurgeryValidEvent args)
     {
@@ -381,37 +430,54 @@ public abstract partial class SharedSurgerySystem : EntitySystem
 
         if (ent.Comp.Inverted == woundable.Bleeds > 0
             && !HasComp<BleedersClampedComponent>(args.Part))
-            args.Cancelled = true;
+        {
+            if (ent.Comp.Inverted)
+                args.AddBlockReason("surgery-blocked-bleeding");
+            else
+                args.Cancelled = true;
+        }
     }
 
     protected bool IsSurgeryValid(EntityUid body, EntityUid targetPart, EntProtoId surgery, EntProtoId stepId,
-        EntityUid user, out Entity<SurgeryComponent> surgeryEnt, out EntityUid part, out EntityUid step)
+        EntityUid user, out Entity<SurgeryComponent> surgeryEnt, out EntityUid part, out EntityUid step, bool logFailure = false)
     {
         surgeryEnt = default;
         part = default;
         step = default;
 
-        if (!HasComp<SurgeryTargetComponent>(body) ||
-            !IsLyingDown(body, user) ||
-            GetSingleton(surgery) is not { } surgeryEntId ||
-            !TryComp(surgeryEntId, out SurgeryComponent? surgeryComp) ||
-            !surgeryComp.Steps.Contains(stepId) ||
-            GetSingleton(stepId) is not { } stepEnt
-            || !HasComp<OrganComponent>(targetPart)
-            && !_bodyQuery.HasComp(targetPart))
+        // Debug helper: when logFailure is set (e.g. the mid-doafter cancel path), log which
+        // specific check rejected the surgery instead of failing silently.
+        bool Fail(string reason)
+        {
+            if (logFailure && _net.IsServer)
+                Log.Warning($"[SurgeryValid] {surgery}/{stepId} on {ToPrettyString(targetPart)} of {ToPrettyString(body)}: invalid - {reason}.");
             return false;
+        }
+
+        if (!HasComp<SurgeryTargetComponent>(body))
+            return Fail("body has no SurgeryTargetComponent");
+        if (!IsLyingDown(body, user))
+            return Fail("patient is not lying down");
+        if (GetSingleton(surgery) is not { } surgeryEntId || !TryComp(surgeryEntId, out SurgeryComponent? surgeryComp))
+            return Fail("surgery prototype/singleton missing");
+        if (!surgeryComp.Steps.Contains(stepId))
+            return Fail($"surgery does not contain step {stepId}");
+        if (GetSingleton(stepId) is not { } stepEnt)
+            return Fail("step singleton missing");
+        if (!HasComp<OrganComponent>(targetPart) && !_bodyQuery.HasComp(targetPart))
+            return Fail("target part is neither an organ nor a body");
 
         TryComp<OrganComponent>(targetPart, out var targetOrgan);
         var ev = new SurgeryValidEvent(body, targetPart, Category: targetOrgan?.Category);
         if (_timing.IsFirstTimePredicted)
         {
             RaiseLocalEvent(stepEnt, ref ev);
-            if (!ev.Cancelled)
+            if (!ev.Blocked)
                 RaiseLocalEvent(surgeryEntId, ref ev);
         }
 
-        if (ev.Cancelled)
-            return false;
+        if (ev.Blocked)
+            return Fail("a SurgeryValidEvent condition blocked it");
 
         surgeryEnt = (surgeryEntId, surgeryComp);
         part = targetPart;

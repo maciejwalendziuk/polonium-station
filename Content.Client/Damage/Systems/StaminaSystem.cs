@@ -89,8 +89,8 @@ public sealed partial class StaminaSystem : SharedStaminaSystem
         if (args.Key != StaminaAnimationKey || !args.Finished || !TryComp<SpriteComponent>(entity, out var sprite))
             return;
 
-        // stop looping if we're below the threshold
-        if (entity.Comp.AnimationThreshold > entity.Comp.StaminaDamage)
+        // stop looping if we're below the threshold or dead
+        if (entity.Comp.AnimationThreshold > entity.Comp.StaminaDamage || _mobState.IsDead(entity))
         {
             _animation.Stop(entity.Owner, StaminaAnimationKey);
             _sprite.SetOffset((entity, sprite), entity.Comp.StartOffset);

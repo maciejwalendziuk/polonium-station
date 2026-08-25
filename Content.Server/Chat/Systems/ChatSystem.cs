@@ -77,6 +77,8 @@ using Content.Shared.Chat;
 using Content.Shared.Examine;
 using Content.Shared.Ghost;
 using Content.Shared.Mobs.Systems;
+using Content.Shared.Mobs;
+using Content.Shared.Mobs.Components;
 using Content.Shared.Players.RateLimiting;
 using Robust.Server.Player;
 using Robust.Shared.Audio.Systems;
@@ -250,6 +252,14 @@ public sealed partial class ChatSystem : SharedChatSystem
         // and i dont feel like vibe checking 50 code paths
         // so we set this here
         // todo free me from chat code
+
+        // POLONIUM NFZ CPR
+        if (!ignoreActionBlocker && TryComp<MobStateComponent>(source, out var mobState) && mobState.CurrentState == MobState.SoftCritical)
+        {
+            if (desiredType == InGameICChatType.Speak)
+                desiredType = InGameICChatType.Whisper;
+        }
+
         if (player != null)
         {
             _chatManager.EnsurePlayer(player.UserId).AddEntity(GetNetEntity(source));

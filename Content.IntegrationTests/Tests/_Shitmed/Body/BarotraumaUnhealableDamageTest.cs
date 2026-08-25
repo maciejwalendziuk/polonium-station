@@ -183,12 +183,15 @@ public sealed class BarotraumaUnhealableDamageTest : GameTest
             organAfterTopical = sDamageable.GetTotalDamage(torso);
 #pragma warning restore CS0618
 
-            Assert.That(mobAfterTopical, Is.GreaterThan(mobBeforeTopical - FixedPoint2.New(1)),
-                "a) TOPICAL: correctly blocked - the torso still has active BoneDamage trauma, and TraumasBlockingHealing " +
-                "refuses topical healing on a broken limb even once bleeding stops, until it's surgically mended. " +
-                "This documents current intentional gating, not a regression guard - if that gate is ever intentionally " +
-                "relaxed, update this assertion rather than treating the failure as a break.");
-            Assert.That(organAfterTopical, Is.GreaterThan(organBeforeTopical - FixedPoint2.New(1)));
+            Assert.That(mobAfterTopical, Is.LessThan(mobBeforeTopical),
+                "a) TOPICAL: with the bridge fan-out normalized (mob == Σ organs), untargeted barotrauma spreads across " +
+                "every limb instead of dumping its full weighted share onto the torso, so the torso no longer soaks " +
+                "enough to break its bone - no TraumasBlockingHealing gate applies. The brutepack heals the torso's " +
+                "Brute wound and that mirrors down onto the mob total. Barotrauma Brute being topically healable is the " +
+                "whole point of this test; if a future change reconcentrates enough damage on the torso to re-break its " +
+                "bone, this may flip back to a blocked no-op - update the assertion rather than treating it as a break.");
+            Assert.That(organAfterTopical, Is.LessThan(organBeforeTopical),
+                "The targeted torso's own Brute damage should have come down under the topical.");
         });
 
         // b) Chem

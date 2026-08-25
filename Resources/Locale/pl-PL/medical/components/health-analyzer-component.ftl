@@ -5,6 +5,7 @@ health-analyzer-window-entity-unknown-value-text = nd.
 health-analyzer-window-entity-alive-text = Żywy
 health-analyzer-window-entity-dead-text = Martwy
 health-analyzer-window-entity-critical-text = Krytyczny
+health-analyzer-window-entity-soft-critical-text = Niestabilny
 health-analyzer-window-entity-temperature-text = Temperatura:
 health-analyzer-window-entity-blood-level-text = Poziom krwi:
 health-analyzer-window-entity-status-text = Stan:
@@ -18,6 +19,12 @@ health-analyzer-window-scan-mode-active = Aktywny
 health-analyzer-window-scan-mode-inactive = Nieaktywny
 health-analyzer-popup-scan-target = { CAPITALIZE($user) } próbuje ciebie zeskanować!
 health-analyzer-window-return-button-text = < Powrót
+
+health-analyzer-window-can-defibrillate-text = [color=#1b9152][bold]Można defibrylować.[/bold][/color]
+health-analyzer-window-can-defibrillate-risky-text = [color=#a35a05][bold]Można defibrylować. OSTROŻNIE! Pacjent nie będzie stabilny.[/bold][/color]
+health-analyzer-window-cannot-defibrillate-adrenaline-text = [color=#a35a05][bold]Podaj epinefrynę przed defibrylacją - bez niej wstrząs nie zadziała![/bold][/color]
+health-analyzer-window-cannot-defibrillate-hopeless-text = [color=#8f1616][bold]Nie można defibrylować - poza możliwością resuscytacji![/bold][/color]
+health-analyzer-window-cannot-defibrillate-damage-text = [color=#8f1616][bold]Nie można defibrylować! Zbyt duże obrażenia![/bold][/color]
 health-analyzer-window-tab-body = Ciało
 health-analyzer-window-tab-organs = Narządy
 health-analyzer-window-tab-chemicals = Chemikalia

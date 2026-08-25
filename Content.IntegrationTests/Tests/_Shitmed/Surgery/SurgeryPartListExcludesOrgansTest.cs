@@ -93,7 +93,7 @@ public sealed class SurgeryPartListExcludesOrgansTest : GameTest
 
             var surgeriesField = typeof(SurgerySystem).GetField("_surgeries", BindingFlags.NonPublic | BindingFlags.Instance);
             Assert.That(surgeriesField, Is.Not.Null);
-            var surgeries = (Dictionary<NetEntity, List<EntProtoId>>)surgeriesField!.GetValue(sSurgery)!;
+            var surgeries = (Dictionary<NetEntity, List<SurgeryEntry>>)surgeriesField!.GetValue(sSurgery)!;
 
             var torsoNet = sEntMan.GetNetEntity(torso);
             var heartNet = sEntMan.GetNetEntity(heart);

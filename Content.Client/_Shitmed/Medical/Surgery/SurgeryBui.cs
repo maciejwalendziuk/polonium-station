@@ -3,6 +3,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+using System.Linq;
 using Content.Client._Shitmed.Choice.UI;
 using Content.Client.Administration.UI.CustomControls;
 using Content.Shared._Shitmed.Medical.Surgery;
@@ -158,14 +159,14 @@ public sealed partial class SurgeryBui : BoundUserInterface
 
             _window.Parts.AddChild(partButton);
 
-            foreach (var surgeryId in surgeries)
+            foreach (var entry in surgeries)
             {
-                if (_system.GetSingleton(surgeryId) is not { } surgery ||
+                if (_system.GetSingleton(entry.Surgery) is not { } surgery ||
                     !_entities.TryGetComponent(surgery, out SurgeryComponent? surgeryComp))
                     continue;
 
-                if (oldPart == entity && oldSurgery?.Proto == surgeryId)
-                    OnSurgeryPressed((surgery, surgeryComp), netEntity, surgeryId);
+                if (oldPart == entity && oldSurgery?.Proto == entry.Surgery)
+                    OnSurgeryPressed((surgery, surgeryComp), netEntity, entry.Surgery);
             }
 
             if (oldPart == entity && oldSurgery == null)
@@ -229,7 +230,7 @@ public sealed partial class SurgeryBui : BoundUserInterface
         RefreshUI();
     }
 
-    private void OnPartPressed(NetEntity netPart, List<EntProtoId> surgeryIds)
+    private void OnPartPressed(NetEntity netPart, List<SurgeryEntry> surgeryEntries)
     {
         if (_window == null)
             return;
@@ -238,21 +239,25 @@ public sealed partial class SurgeryBui : BoundUserInterface
         _isBody = _entities.HasComponent<BodyComponent>(_part);
         _window.Surgeries.DisposeAllChildren();
 
-        var surgeries = new List<(Entity<SurgeryComponent> Ent, EntProtoId Id, string Name)>();
-        foreach (var surgeryId in surgeryIds)
+        var surgeries = new List<(Entity<SurgeryComponent> Ent, EntProtoId Id, string Name, List<string>? BlockReasons)>();
+        foreach (var entry in surgeryEntries)
         {
-            if (_system.GetSingleton(surgeryId) is not { } surgery ||
+            if (_system.GetSingleton(entry.Surgery) is not { } surgery ||
                 !_entities.TryGetComponent(surgery, out SurgeryComponent? surgeryComp))
             {
                 continue;
             }
 
             var name = _entities.GetComponent<MetaDataComponent>(surgery).EntityName;
-            surgeries.Add(((surgery, surgeryComp), surgeryId, name));
+            surgeries.Add(((surgery, surgeryComp), entry.Surgery, name, entry.BlockReasons));
         }
 
         surgeries.Sort((a, b) =>
         {
+            var blocked = (a.BlockReasons is { Count: > 0 }).CompareTo(b.BlockReasons is { Count: > 0 });
+            if (blocked != 0)
+                return blocked;
+
             var priority = a.Ent.Comp.Priority.CompareTo(b.Ent.Comp.Priority);
             if (priority != 0)
                 return priority;
@@ -265,7 +270,18 @@ public sealed partial class SurgeryBui : BoundUserInterface
             var surgeryButton = new ChoiceControl();
             surgeryButton.Set(surgery.Name, null);
 
-            surgeryButton.Button.OnPressed += _ => OnSurgeryPressed(surgery.Ent, netPart, surgery.Id);
+            if (surgery.BlockReasons is { Count: > 0 } reasons)
+            {
+                var tip = string.Join("\n", reasons.Select(Loc.GetString));
+                surgeryButton.Button.Disabled = true;
+                surgeryButton.Button.ToolTip = tip;
+                surgeryButton.ToolTip = tip;
+            }
+            else
+            {
+                surgeryButton.Button.OnPressed += _ => OnSurgeryPressed(surgery.Ent, netPart, surgery.Id);
+            }
+
             _window.Surgeries.AddChild(surgeryButton);
         }
 

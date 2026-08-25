@@ -11,6 +11,7 @@ using Content.Shared._Shitmed.Medical.Surgery.Conditions;
 using Content.Shared._Shitmed.Medical.Surgery.Wounds.Components;
 using Content.Shared._Shitmed.Medical.Surgery.Wounds.Systems;
 using Content.Shared._Shitmed.Medical.Surgery.Effects.Step;
+using Content.Shared._Shitmed.Medical.Surgery.Steps.Parts;
 using Robust.Server.GameObjects;
 using Robust.Shared.Prototypes;
 
@@ -24,15 +25,13 @@ public sealed partial class SurgerySystem : SharedSurgerySystem
     [Dependency] private WoundSystem _wounds = default!;
     [Dependency] private UserInterfaceSystem _ui = default!;
 
-    private readonly Dictionary<NetEntity, List<EntProtoId>> _surgeries = new();
+    private readonly Dictionary<NetEntity, List<SurgeryEntry>> _surgeries = new();
 
     public override void Initialize()
     {
         base.Initialize();
 
         SubscribeLocalEvent<SurgeryTargetComponent, SurgeryStepDamageEvent>(OnSurgeryStepDamage);
-        // You might be wondering "why aren't we using StepEvent for these two?" reason being that StepEvent fires off regardless of success on the previous functions
-        // so this would heal entities even if you had a used or incorrect organ.
         SubscribeLocalEvent<SurgeryDamageChangeEffectComponent, SurgeryStepDamageChangeEvent>(OnSurgeryDamageChange);
         SubscribeLocalEvent<SurgerySpecialDamageChangeEffectComponent, SurgeryStepDamageChangeEvent>(OnUnimplementedSpecialDamageChange);
         SubscribeLocalEvent<SurgeryStepEmoteEffectComponent, SurgeryStepEvent>(OnStepScreamComplete);
@@ -52,7 +51,8 @@ public sealed partial class SurgerySystem : SharedSurgerySystem
                 if (organ?.Category is not { } category || !LimbTargetMap.TryGetTarget(category, out _))
                     continue;
 
-                var valid = new List<EntProtoId>();
+                var incisionOpen = HasComp<IncisionOpenComponent>(part);
+                var valid = new List<SurgeryEntry>();
                 foreach (var surgery in AllSurgeries)
                 {
                     if (GetSingleton(surgery) is not { } surgeryEnt)
@@ -64,7 +64,8 @@ public sealed partial class SurgerySystem : SharedSurgerySystem
                     if (ev.Cancelled)
                         continue;
 
-                    valid.Add(surgery);
+                    var reasons = !incisionOpen && ev.BlockReasons is { Count: > 0 } ? ev.BlockReasons : null;
+                    valid.Add(new SurgeryEntry(surgery, reasons));
                 }
                 _surgeries[GetNetEntity(part)] = valid;
             }

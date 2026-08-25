@@ -191,11 +191,20 @@
   - type: BodyEmotes
     soundsId: MothBodyEmotes
 
+  # funky start, softcrit
   - type: MobThresholds
     thresholds:
       0: Alive
-      60: Critical
-      125: Dead
+      100: SoftCritical
+      150: HardCritical
+      200: Dead
+  - type: MobState
+    allowedStates:
+    - Alive
+    - SoftCritical
+    - HardCritical
+    - Dead
+  # funky end
   - type: Temperature
     currentTemperature: 310.15
     specificHeat: 46

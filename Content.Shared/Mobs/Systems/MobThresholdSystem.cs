@@ -137,6 +137,16 @@ public sealed partial class MobThresholdSystem : EntitySystem
             }
         }
 
+        // funky, for anything asking for a plain Critical threshold, the softcrit entry is the right one
+        if (mobState != MobState.Critical)
+            return false;
+
+        foreach (var pair in thresholdComponent.Thresholds.Where(pair => pair.Value == MobState.SoftCritical))
+        {
+            threshold = pair.Key;
+            return true;
+        }
+
         return false;
     }
 

@@ -284,7 +284,8 @@ public sealed partial class GuardianSystem : EntitySystem
             !TryComp<GuardianComponent>(ent.Comp.HostedGuardian, out var guardianComp))
             return;
 
-        if (args.NewMobState == MobState.Critical)
+        if (args.NewMobState is MobState.Critical or MobState.SoftCritical or MobState.HardCritical &&
+            args.OldMobState is not (MobState.Critical or MobState.SoftCritical or MobState.HardCritical))
         {
             _popup.PopupEntity(Loc.GetString(ent.Comp.GuardianHostCritWarn),
                 ent.Comp.HostedGuardian.Value,

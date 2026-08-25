@@ -6,6 +6,7 @@ health-analyzer-window-entity-unknown-value-text = N/A
 health-analyzer-window-entity-alive-text = Alive
 health-analyzer-window-entity-dead-text = Dead
 health-analyzer-window-entity-critical-text = Critical
+health-analyzer-window-entity-soft-critical-text = Unstable
 
 health-analyzer-window-entity-temperature-text = Temperature:
 health-analyzer-window-entity-blood-level-text = Blood Level:
@@ -29,3 +30,9 @@ health-analyzer-window-tab-organs = Organs
 health-analyzer-window-tab-chemicals = Chemicals
 health-analyzer-window-return-button-text = < Return
 health-analyzer-window-conditions-text = Conditions
+
+health-analyzer-window-can-defibrillate-text = [color=#1b9152][bold]Can be defibrillated.[/bold][/color]
+health-analyzer-window-can-defibrillate-risky-text = [color=#a35a05][bold]Can barely be defibrillated! CAREFUL - patient won't be stable![/bold][/color]
+health-analyzer-window-cannot-defibrillate-adrenaline-text = [color=#a35a05][bold]Inject epinephrine before defibrillating - the shock won't take without it![/bold][/color]
+health-analyzer-window-cannot-defibrillate-hopeless-text = [color=#8f1616][bold]Cannot be defibrillated - beyond resuscitation![/bold][/color]
+health-analyzer-window-cannot-defibrillate-damage-text = [color=#8f1616][bold]Cannot be defibrillated! Too much damage![/bold][/color]

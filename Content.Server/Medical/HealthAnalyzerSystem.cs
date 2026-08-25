@@ -70,6 +70,7 @@ using Content.Shared.Interaction;
 using Content.Shared.Interaction.Events;
 using Content.Shared.Item.ItemToggle;
 using Content.Shared.Item.ItemToggle.Components;
+using Content.Shared.Medical;
 using Content.Shared.MedicalScanner;
 using Content.Shared.Mobs.Components;
 using Content.Shared.Popups;
@@ -89,6 +90,7 @@ public sealed partial class HealthAnalyzerSystem : BaseAnalyzerSystem<HealthAnal
     [Dependency] private PartStatusSystem _partStatus = default!;
     [Dependency] private WoundSystem _woundSystem = default!;
     [Dependency] private TraumaSystem _traumaSystem = default!;
+    [Dependency] private DefibrillatorSystem _defibrillator = default!;
     [Dependency] private SharedSurgerySystem _surgerySystem = default!;
 
     public override void Initialize()
@@ -180,7 +182,7 @@ public sealed partial class HealthAnalyzerSystem : BaseAnalyzerSystem<HealthAnal
         {
             _uiSystem.ServerSendUiMessage(uiEntity, uiKey, new HealthAnalyzerBodyMessage(
                 null, float.NaN, float.NaN, null, false, null,
-                new(), false, new(), new(), new(), new(), null));
+                new(), false, new(), new(), new(), new(), DefibrillationReadiness.None, new(), null));
             return;
         }
 
@@ -199,19 +201,21 @@ public sealed partial class HealthAnalyzerSystem : BaseAnalyzerSystem<HealthAnal
         var tourniqueted = FetchTourniquetData(body);
         var unfinishedSurgery = FetchUnfinishedSurgeryData(body);
         var missingOrgans = FetchMissingOrgansData(body);
+        var blockedHealing = FetchBlockedHealingData(body);
+        var defibrillation = _defibrillator.GetDefibrillationReadiness(validTarget);
 
         switch (mode)
         {
             case HealthAnalyzerMode.Organs:
                 _uiSystem.ServerSendUiMessage(uiEntity, uiKey, new HealthAnalyzerOrgansMessage(
                     GetNetEntity(validTarget), bodyTemperature, bloodAmount, scanMode, bodyStatus, bleeding, systemicBleeding, tourniqueted, unfinishedSurgery, missingOrgans,
-                    FetchOrganData(body)));
+                    blockedHealing, defibrillation, FetchOrganData(body)));
                 break;
 
             case HealthAnalyzerMode.Chemicals:
                 _uiSystem.ServerSendUiMessage(uiEntity, uiKey, new HealthAnalyzerChemicalsMessage(
                     GetNetEntity(validTarget), bodyTemperature, bloodAmount, scanMode, bodyStatus, bleeding, systemicBleeding, tourniqueted, unfinishedSurgery, missingOrgans,
-                    FetchChemicalData(validTarget, body)));
+                    blockedHealing, defibrillation, FetchChemicalData(validTarget, body)));
                 break;
 
             case HealthAnalyzerMode.Body:
@@ -220,7 +224,7 @@ public sealed partial class HealthAnalyzerSystem : BaseAnalyzerSystem<HealthAnal
 
                 _uiSystem.ServerSendUiMessage(uiEntity, uiKey, new HealthAnalyzerBodyMessage(
                     GetNetEntity(validTarget), bodyTemperature, bloodAmount, scanMode, unrevivable, bodyStatus, bleeding, systemicBleeding, tourniqueted, unfinishedSurgery, missingOrgans,
-                    FetchTraumaData(body), part != null ? GetNetEntity(part.Value) : null));
+                    blockedHealing, defibrillation, FetchTraumaData(body), part != null ? GetNetEntity(part.Value) : null));
                 break;
         }
     }
@@ -244,6 +248,38 @@ public sealed partial class HealthAnalyzerSystem : BaseAnalyzerSystem<HealthAnal
         }
 
         return bleeding;
+    }
+
+    private Dictionary<TargetBodyPart, bool> FetchBlockedHealingData(BodyComponent body)
+    {
+        var blocked = new Dictionary<TargetBodyPart, bool>();
+
+        if (body.Organs is null)
+            return blocked;
+
+        foreach (var organ in body.Organs.ContainedEntities)
+        {
+            if (!TryComp<OrganComponent>(organ, out var organComp)
+                || organComp.Category is not { } category
+                || !LimbTargetMap.TryGetTarget(category, out var targetPart)
+                || !TryComp<WoundableComponent>(organ, out var woundable))
+                continue;
+
+            foreach (var wound in _woundSystem.GetWoundableWounds(organ, woundable))
+            {
+                if (wound.Comp.IsScar
+                    || !wound.Comp.CanBeHealed
+                    || wound.Comp.WoundSeverityPoint <= 0
+                    || !TryComp<TraumaInflicterComponent>(wound, out var inflicter)
+                    || !_traumaSystem.WoundHealBlockedByTrauma((wound, inflicter), woundable))
+                    continue;
+
+                blocked[targetPart] = true;
+                break;
+            }
+        }
+
+        return blocked;
     }
 
     private Dictionary<TargetBodyPart, bool> FetchTourniquetData(BodyComponent body)

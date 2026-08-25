@@ -23,6 +23,20 @@ public partial class TraumaSystem
         { BoneSeverity.Broken, 1 },
     };
 
+    /// <summary>
+    /// How much a hit's organ-damage severity is amplified by the state of the bone protecting the
+    /// struck part - a broken ribcage/skull drives the organs inside harder. Only ever applies to
+    /// parts that house vital organs (head/torso), since organ-damage traumas only occur there.
+    /// Tunable.
+    /// </summary>
+    private readonly Dictionary<BoneSeverity, FixedPoint2> _boneOrganDamageAmp = new()
+    {
+        { BoneSeverity.Normal, 1 },
+        { BoneSeverity.Damaged, 1.5 },
+        { BoneSeverity.Cracked, 2 },
+        { BoneSeverity.Broken, 2.5 },
+    };
+
     private readonly Dictionary<WoundableSeverity, FixedPoint2> _boneTraumaChanceMultipliers = new()
     {
         { WoundableSeverity.Healthy, 0 },

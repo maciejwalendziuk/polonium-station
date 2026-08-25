@@ -16,6 +16,19 @@ using Content.Shared.Timing;
 using Content.Shared.Traits.Assorted;
 using Robust.Shared.Audio.Systems;
 using Robust.Shared.Player;
+using Robust.Shared.Prototypes; // funky
+using Robust.Shared.Random; // funky
+using System.Linq; // funky
+using Robust.Shared.Configuration; // funky
+using Robust.Shared.Network; // funky
+using Content.Shared.Inventory; // funky
+using Content.Shared.FixedPoint; // funky
+using Content.Shared.EntityEffects.Effects.StatusEffects; // funky
+using Content.Shared.Chemistry.EntitySystems; // funky
+using Content.Shared.Chemistry.Reagent; // funky
+using Content.Shared.Body.Components; // funky
+using Content.Shared._Funkystation.CCVar; // funky
+using Content.Shared.Damage; // funky
 
 namespace Content.Shared.Medical;
 
@@ -39,11 +52,25 @@ public abstract partial class SharedDefibrillatorSystem : EntitySystem
     [Dependency] private SharedMindSystem _mind = default!;
     [Dependency] private UseDelaySystem _useDelay = default!;
     [Dependency] private SharedInteractionSystem _interactionSystem = default!;
+    [Dependency] private InventorySystem _inventory = default!; // funky
+    [Dependency] private SharedSolutionContainerSystem _solutionContainer = default!; // funky
+    [Dependency] private IRobustRandom _random = default!; // funky
+    [Dependency] private IPrototypeManager _prototypeManager = default!; // funky
+    [Dependency] private IConfigurationManager _config = default!; // funky
+    [Dependency] private INetManager _net = default!; // funky
 
     private readonly HashSet<EntityUid> _interacters = new();
 
+    private float _reviveChance; // funky
+    private float _adrenalineCostPerShock; // funky
+
     public override void Initialize()
     {
+        base.Initialize(); // funky
+        // Subs.CVar auto-unsubscribes on shutdown; raw _config.OnValueChanged would leak a handler each round. // funky
+        Subs.CVar(_config, DefibrillatorCVars.ReviveChance, value => _reviveChance = value, true); // funky
+        Subs.CVar(_config, DefibrillatorCVars.AdrenalineCost, value => _adrenalineCostPerShock = value, true); // funky
+
         SubscribeLocalEvent<DefibrillatorComponent, AfterInteractEvent>(OnAfterInteract);
         SubscribeLocalEvent<DefibrillatorComponent, DefibrillatorZapDoAfterEvent>(OnDoAfter);
     }
@@ -109,7 +136,12 @@ public abstract partial class SharedDefibrillatorSystem : EntitySystem
         if (!targetCanBeAlive && !ent.Comp.CanDefibCrit && _mobState.IsCritical(target, mobState))
             return false;
 
-        return true;
+        // funky, gotta take off their hardsuit or coat
+        if (!_inventory.TryGetSlotEntity(target, "outerClothing", out _))
+            return true;
+
+        _popup.PopupClient(Loc.GetString("defibrillator-clothing-blocking"), user);
+        return false;
     }
 
     /// <summary>
@@ -208,7 +240,61 @@ public abstract partial class SharedDefibrillatorSystem : EntitySystem
             if (_mobState.IsDead(target, targetMobState))
                 _damageable.TryChangeDamage(target, ent.Comp.ZapHeal, true, origin: user);
 
-            if (TryComp<MobThresholdsComponent>(target, out var targetThresholds) &&
+            // funky start, need an adrenaline reagent in their system to kick the heart back on
+            var hasAdrenaline = false;
+            if (TryComp<BloodstreamComponent>(target, out var bloodstream))
+            {
+                var bloodSolution = bloodstream.BloodSolution;
+
+                if (_solutionContainer.ResolveSolution(target, bloodstream.BloodSolutionName, ref bloodSolution))
+                {
+                    var contents = bloodSolution.Value.Comp.Solution.Contents;
+
+                    // check reagents in bloodstream
+                    foreach (var (reagentId, quantity) in contents)
+                    {
+                        // if this reagent grants adrenaline, consume it and roll for revival
+                        if (quantity <= FixedPoint2.Zero || !ReagentGrantsAdrenaline(reagentId.Prototype))
+                            continue;
+
+                        hasAdrenaline = true;
+
+                        // removes the adrenaline cost amount
+                        _solutionContainer.RemoveReagent(bloodSolution.Value, reagentId, FixedPoint2.New(_adrenalineCostPerShock));
+
+                        break;
+                    }
+                }
+            }
+
+            var canRevive = true;
+            if (_mobState.IsDead(target, targetMobState))
+            {
+                canRevive = false;
+
+                if (hasAdrenaline)
+                {
+                    // server-only roll to prevent client mispredicting a successful revival
+                    canRevive = _net.IsServer && _random.Prob(_reviveChance);
+                }
+                else
+                {
+                    // if they have no adrenaline reagent, popup
+                    _popup.PopupClient(Loc.GetString("defibrillator-no-adrenaline"), target, user);
+                }
+            }
+
+            // adrenaline zap heals 25 asphyx
+            if (hasAdrenaline)
+            {
+                var asphyxHeal = new DamageSpecifier();
+                asphyxHeal.DamageDict.Add("Asphyxiation", FixedPoint2.New(-25));
+                _damageable.TryChangeDamage(target, asphyxHeal, true, origin: user);
+            }
+            // funky end
+
+            if (canRevive && // funky
+                TryComp<MobThresholdsComponent>(target, out var targetThresholds) &&
                 _mobThreshold.TryGetThresholdForState(target, MobState.Dead, out var threshold, targetThresholds) &&
                 _damageable.GetTotalDamage(target) < threshold)
             {
@@ -241,6 +327,85 @@ public abstract partial class SharedDefibrillatorSystem : EntitySystem
 
         var ev = new TargetDefibrillatedEvent(user, (ent.Owner, ent.Comp));
         RaiseLocalEvent(target, ref ev);
+    }
+
+    /// <summary>
+    /// Asphyxiation a standard defibrillator's shock heals on a dead target (the zapHeal on the base
+    /// Defibrillator prototype). The analyzer can't know which defib a medic will bring, so its
+    /// readiness read assumes the standard one.
+    /// </summary>
+    private const int StandardShockAsphyxHeal = 40;
+
+    /// <summary>Extra asphyxiation the adrenaline kick heals on top of the shock (see <see cref="Zap"/>).</summary>
+    private const int AdrenalineAsphyxHeal = 25;
+
+    /// <summary>Post-shock damage this close to the death threshold still revives, but lands them at
+    /// the crit edge - reported as risky rather than ready.</summary>
+    private const float RiskyThresholdFraction = 0.9f;
+
+    private static readonly ProtoId<Damage.Prototypes.DamageTypePrototype> AsphyxiationType = "Asphyxiation";
+
+    /// <summary>
+    /// Whether a reagent's bloodstream metabolism grants the Adrenaline status effect - the same test
+    /// <see cref="Zap"/> uses to decide a shock can revive. Matches by effect, not name, so epinephrine
+    /// and the stimulants all qualify.
+    /// </summary>
+    public bool ReagentGrantsAdrenaline(string reagentProtoId)
+    {
+        return _prototypeManager.TryIndex<ReagentPrototype>(reagentProtoId, out var proto)
+            && proto.Metabolisms != null
+            && proto.Metabolisms.Metabolisms.TryGetValue("Bloodstream", out var metabolism)
+            && metabolism.Effects.Any(effect => effect is GenericStatusEffect { Key: "Adrenaline" });
+    }
+
+    /// <summary>Whether the target's blood holds any reagent that would let a defib shock revive them.</summary>
+    public bool HasAdrenalineReagent(EntityUid target)
+    {
+        if (!TryComp<BloodstreamComponent>(target, out var bloodstream))
+            return false;
+
+        var bloodSolution = bloodstream.BloodSolution;
+        if (!_solutionContainer.ResolveSolution(target, bloodstream.BloodSolutionName, ref bloodSolution))
+            return false;
+
+        foreach (var (reagentId, quantity) in bloodSolution.Value.Comp.Solution.Contents)
+        {
+            if (quantity > FixedPoint2.Zero && ReagentGrantsAdrenaline(reagentId.Prototype))
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Whether a dead patient could be shocked back, and if not, why not - the analyzer's read of the
+    /// same conditions <see cref="Zap"/> revives on. Only meaningful for a Dead target; a living (even
+    /// crit) patient is not a defib case. Assumes a standard defibrillator's asphyxiation heal.
+    /// </summary>
+    public DefibrillationReadiness GetDefibrillationReadiness(EntityUid target)
+    {
+        if (!_mobState.IsDead(target))
+            return DefibrillationReadiness.None;
+
+        if (_rotting.IsRotten(target) || HasComp<UnrevivableComponent>(target))
+            return DefibrillationReadiness.Hopeless;
+
+        if (!_mobThreshold.TryGetThresholdForState(target, MobState.Dead, out var deadThreshold))
+            return DefibrillationReadiness.None;
+
+        var asphyx = _damageable.GetDamageOfType(target, AsphyxiationType);
+        var healed = FixedPoint2.Min(asphyx, FixedPoint2.New(StandardShockAsphyxHeal + AdrenalineAsphyxHeal));
+        var postShockDamage = _damageable.GetTotalDamage(target) - healed;
+
+        if (postShockDamage >= deadThreshold)
+            return DefibrillationReadiness.TooMuchDamage;
+
+        if (!HasAdrenalineReagent(target))
+            return DefibrillationReadiness.NeedsAdrenaline;
+
+        return postShockDamage >= deadThreshold * RiskyThresholdFraction
+            ? DefibrillationReadiness.Risky
+            : DefibrillationReadiness.Ready;
     }
 
     // TODO: SharedEuiManager so that we can just directly open the eui from shared.

@@ -6,6 +6,7 @@
 using Content.Shared._Shitmed.Medical.Surgery.Traumas;
 using Content.Shared._Shitmed.Medical.Surgery.Wounds;
 using Content.Shared._Shitmed.Targeting;
+using Content.Shared.Medical;
 using Content.Shared.Body;
 using Content.Shared.Chemistry.Components;
 using Content.Shared.FixedPoint;
@@ -35,6 +36,10 @@ public abstract class HealthAnalyzerBaseMessage : BoundUserInterfaceMessage
 
     public readonly List<ProtoId<OrganCategoryPrototype>> MissingOrgans;
 
+    public readonly Dictionary<TargetBodyPart, bool> BlockedHealing;
+
+    public readonly DefibrillationReadiness Defibrillation;
+
     protected HealthAnalyzerBaseMessage(
         NetEntity? targetEntity,
         float temperature,
@@ -46,7 +51,9 @@ public abstract class HealthAnalyzerBaseMessage : BoundUserInterfaceMessage
         bool systemicBleeding,
         Dictionary<TargetBodyPart, bool> tourniqueted,
         Dictionary<TargetBodyPart, bool> unfinishedSurgery,
-        List<ProtoId<OrganCategoryPrototype>> missingOrgans)
+        List<ProtoId<OrganCategoryPrototype>> missingOrgans,
+        Dictionary<TargetBodyPart, bool> blockedHealing,
+        DefibrillationReadiness defibrillation)
     {
         TargetEntity = targetEntity;
         Temperature = temperature;
@@ -59,6 +66,8 @@ public abstract class HealthAnalyzerBaseMessage : BoundUserInterfaceMessage
         Tourniqueted = tourniqueted;
         UnfinishedSurgery = unfinishedSurgery;
         MissingOrgans = missingOrgans;
+        BlockedHealing = blockedHealing;
+        Defibrillation = defibrillation;
     }
 }
 
@@ -82,9 +91,11 @@ public sealed class HealthAnalyzerBodyMessage : HealthAnalyzerBaseMessage
         Dictionary<TargetBodyPart, bool> tourniqueted,
         Dictionary<TargetBodyPart, bool> unfinishedSurgery,
         List<ProtoId<OrganCategoryPrototype>> missingOrgans,
+        Dictionary<TargetBodyPart, bool> blockedHealing,
+        DefibrillationReadiness defibrillation,
         Dictionary<NetEntity, List<WoundableTraumaData>> traumas,
         NetEntity? selectedPart)
-        : base(targetEntity, temperature, bloodLevel, scanMode, HealthAnalyzerMode.Body, body, bleeding, systemicBleeding, tourniqueted, unfinishedSurgery, missingOrgans)
+        : base(targetEntity, temperature, bloodLevel, scanMode, HealthAnalyzerMode.Body, body, bleeding, systemicBleeding, tourniqueted, unfinishedSurgery, missingOrgans, blockedHealing, defibrillation)
     {
         Unrevivable = unrevivable;
         SelectedPart = selectedPart;
@@ -124,8 +135,10 @@ public sealed class HealthAnalyzerOrgansMessage : HealthAnalyzerBaseMessage
         Dictionary<TargetBodyPart, bool> tourniqueted,
         Dictionary<TargetBodyPart, bool> unfinishedSurgery,
         List<ProtoId<OrganCategoryPrototype>> missingOrgans,
+        Dictionary<TargetBodyPart, bool> blockedHealing,
+        DefibrillationReadiness defibrillation,
         Dictionary<NetEntity, OrganTraumaData> organs)
-        : base(targetEntity, temperature, bloodLevel, scanMode, HealthAnalyzerMode.Organs, body, bleeding, systemicBleeding, tourniqueted, unfinishedSurgery, missingOrgans)
+        : base(targetEntity, temperature, bloodLevel, scanMode, HealthAnalyzerMode.Organs, body, bleeding, systemicBleeding, tourniqueted, unfinishedSurgery, missingOrgans, blockedHealing, defibrillation)
     {
         Organs = organs;
     }
@@ -148,8 +161,10 @@ public sealed class HealthAnalyzerChemicalsMessage : HealthAnalyzerBaseMessage
         Dictionary<TargetBodyPart, bool> tourniqueted,
         Dictionary<TargetBodyPart, bool> unfinishedSurgery,
         List<ProtoId<OrganCategoryPrototype>> missingOrgans,
+        Dictionary<TargetBodyPart, bool> blockedHealing,
+        DefibrillationReadiness defibrillation,
         Dictionary<NetEntity, NamedSolution> solutions)
-        : base(targetEntity, temperature, bloodLevel, scanMode, HealthAnalyzerMode.Chemicals, body, bleeding, systemicBleeding, tourniqueted, unfinishedSurgery, missingOrgans)
+        : base(targetEntity, temperature, bloodLevel, scanMode, HealthAnalyzerMode.Chemicals, body, bleeding, systemicBleeding, tourniqueted, unfinishedSurgery, missingOrgans, blockedHealing, defibrillation)
     {
         Solutions = solutions;
     }

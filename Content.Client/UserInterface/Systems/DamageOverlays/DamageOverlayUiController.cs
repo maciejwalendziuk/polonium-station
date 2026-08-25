@@ -147,9 +147,7 @@ public sealed partial class DamageOverlayUiController : UIController
             if (!consciousness.IsConscious)
             {
                 _overlay.PainLevel = 0;
-                _overlay.CritLevel = consciousness.Threshold > 0
-                    ? FixedPoint2.Min(1f, (consciousness.Threshold - consciousness.Consciousness) / consciousness.Threshold).Float()
-                    : 1f;
+                _overlay.CritLevel = 0;
                 return;
             }
 
@@ -212,6 +210,8 @@ public sealed partial class DamageOverlayUiController : UIController
                 break;
             }
             case MobState.Critical:
+            case MobState.SoftCritical:
+            case MobState.HardCritical:
             {
                 if (!_mobThresholdSystem.TryGetDeadPercentage(entity,
                         FixedPoint2.Max(0.0, _damageable.GetTotalDamage((entity, damageable))), out var critLevel))

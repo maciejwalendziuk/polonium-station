@@ -440,6 +440,18 @@ public sealed partial class DamageableSystem
     }
 
     /// <summary>
+    /// Gets the amount of a single damage type currently sustained by an entity.
+    /// </summary>
+    [Obsolete("Do not rely on the ability to determine a numerically quantifiable amount of damage")]
+    public FixedPoint2 GetDamageOfType(Entity<DamageableComponent?> ent, ProtoId<DamageTypePrototype> type)
+    {
+        if (!_damageableQuery.Resolve(ent, ref ent.Comp, false))
+            return FixedPoint2.Zero;
+
+        return ent.Comp.Damage.DamageDict.GetValueOrDefault(type);
+    }
+
+    /// <summary>
     /// Gets the total amount of damage currently sustained by an entity, indexed by damage group.
     /// </summary>
     [Obsolete("Do not rely on the ability to determine a numerically quantifiable amount of damage")]

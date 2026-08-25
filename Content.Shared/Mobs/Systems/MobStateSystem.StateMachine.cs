@@ -102,8 +102,24 @@ public partial class MobStateSystem
     {
         var oldState = component.CurrentState;
         //make sure we are allowed to enter the new state
-        if (oldState == newState || !component.AllowedStates.Contains(newState))
+        if (oldState == newState) // funky
             return;
+
+        // funky start, if the requested state isn't allowed (e.g. plain Critical on a softcrit mob),
+        // fall back to the nearest allowed crit variant instead of rejecting the change
+        var targetState = newState;
+        if (!component.AllowedStates.Contains(targetState))
+        {
+            if (!ResolveStateFallback(oldState, targetState, component, out targetState))
+                return;
+
+            newState = targetState;
+
+            // the fallback may resolve to the state we're already in; don't fire a redundant transition
+            if (newState == oldState)
+                return;
+        }
+        // funky end
 
         OnExitState(target, component, oldState);
         component.CurrentState = newState;

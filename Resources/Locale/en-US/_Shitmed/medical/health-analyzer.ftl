@@ -31,6 +31,13 @@ condition-body-unfinished-surgery-RightArm = • {$entity} has an unfinished sur
 condition-body-unfinished-surgery-LeftLeg = • {$entity} has an unfinished surgery on their left leg.
 condition-body-unfinished-surgery-RightLeg = • {$entity} has an unfinished surgery on their right leg.
 
+condition-body-blocked-healing-Head = • {$entity}'s head can't be treated until its trauma is mended.
+condition-body-blocked-healing-Chest = • {$entity}'s torso can't be treated until its trauma is mended.
+condition-body-blocked-healing-LeftArm = • {$entity}'s left arm can't be treated until its trauma is mended.
+condition-body-blocked-healing-RightArm = • {$entity}'s right arm can't be treated until its trauma is mended.
+condition-body-blocked-healing-LeftLeg = • {$entity}'s left leg can't be treated until its trauma is mended.
+condition-body-blocked-healing-RightLeg = • {$entity}'s right leg can't be treated until its trauma is mended.
+
 condition-organ-damage-Normal = • The {$organ} is mostly good.
 condition-organ-damage-Damaged = • The {$organ} is damaged.
 condition-organ-damage-Destroyed = • The {$organ} is ruined...

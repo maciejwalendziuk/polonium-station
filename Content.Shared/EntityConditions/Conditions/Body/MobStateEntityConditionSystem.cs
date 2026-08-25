@@ -12,6 +12,13 @@ public sealed partial class MobStateEntityConditionSystem : EntityConditionSyste
 {
     protected override void Condition(Entity<MobStateComponent> entity, ref EntityConditionEvent<MobStateCondition> args)
     {
+        if (args.Condition.Mobstate == MobState.Critical)
+        {
+            if (entity.Comp.CurrentState is MobState.Critical or MobState.SoftCritical or MobState.HardCritical)
+                args.Result = true;
+            return;
+        }
+
         if (entity.Comp.CurrentState == args.Condition.Mobstate)
             args.Result = true;
     }

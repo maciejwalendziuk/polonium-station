@@ -87,6 +87,8 @@ public abstract partial class SharedStunSystem : EntitySystem
                     break;
                 }
             case MobState.Critical:
+            case MobState.SoftCritical: // funky
+            case MobState.HardCritical: // funky
                 {
                     _status.TryRemoveStatusEffect(uid, StunId);
                     break;

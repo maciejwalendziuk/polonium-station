@@ -20,7 +20,7 @@ namespace Content.Shared._Shitmed.Medical.Surgery.Traumas.Systems;
 public partial class TraumaSystem
 {
     private const string TraumaContainerId = "Traumas";
-    public static readonly TraumaType[] TraumasBlockingHealing = { TraumaType.BoneDamage, TraumaType.OrganDamage, TraumaType.Dismemberment };
+    public static readonly TraumaType[] TraumasBlockingHealing = { TraumaType.Dismemberment };
 
     private void InitProcess()
     {
@@ -65,19 +65,33 @@ public partial class TraumaSystem
         if (args.IgnoreBlockers)
             return;
 
-        foreach (var trauma in GetAllWoundTraumas(inflicter, inflicter))
-        {
-            if (TraumasBlockingHealing.Contains(trauma.Comp.TraumaType))
-            {
-                if (trauma.Comp.TraumaType == TraumaType.BoneDamage
-                    && args.Woundable.Comp.Bone?.ContainedEntities.FirstOrNull() is { } bone
-                    && TryComp(bone, out BoneComponent? boneComp)
-                    && boneComp.BoneSeverity != BoneSeverity.Broken)
-                    continue;
+        if (WoundHealBlockedByTrauma(inflicter, args.Woundable.Comp))
+            args.Cancelled = true;
+    }
 
-                args.Cancelled = true;
-            }
+    /// <summary>
+    /// Whether a trauma on this wound (broken bone, organ damage, dismemberment) blocks it from
+    /// healing topically - the same rule <see cref="OnWoundHealAttempt"/> enforces, exposed so the
+    /// health analyzer can flag the block without re-deriving it. Bone damage only blocks while the
+    /// bone is actually broken.
+    /// </summary>
+    public bool WoundHealBlockedByTrauma(Entity<TraumaInflicterComponent> wound, WoundableComponent woundable)
+    {
+        foreach (var trauma in GetAllWoundTraumas(wound, wound))
+        {
+            if (!TraumasBlockingHealing.Contains(trauma.Comp.TraumaType))
+                continue;
+
+            if (trauma.Comp.TraumaType == TraumaType.BoneDamage
+                && woundable.Bone?.ContainedEntities.FirstOrNull() is { } bone
+                && TryComp(bone, out BoneComponent? boneComp)
+                && boneComp.BoneSeverity != BoneSeverity.Broken)
+                continue;
+
+            return true;
         }
+
+        return false;
     }
 
     #region Public API
@@ -619,6 +633,18 @@ public partial class TraumaSystem
 
     #region Private API
 
+    /// <summary>
+    /// Organ-damage amplifier from the state of the bone protecting the struck part - a broken
+    /// ribcage/skull makes the organs inside take more. Returns 1 (no amp) when the part has no
+    /// bone or it's intact. See <see cref="_boneOrganDamageAmp"/> for the tunable curve.
+    /// </summary>
+    private FixedPoint2 GetOrganDamageAmp(WoundableComponent woundable)
+    {
+        return TryGetBoneSeverity(woundable, out var severity) && _boneOrganDamageAmp.TryGetValue(severity, out var amp)
+            ? amp
+            : FixedPoint2.New(1);
+    }
+
     private void ApplyTraumas(Entity<WoundableComponent> target, Entity<TraumaInflicterComponent> inflicter, List<TraumaType> traumas, FixedPoint2 severity)
     {
         if (!TryComp<OrganComponent>(target.Owner, out var organComp) || organComp.Body is not { } body)
@@ -693,12 +719,13 @@ public partial class TraumaSystem
                     break;
 
                 case TraumaType.OrganDamage:
-                    var traumaEnt = AddTrauma(targetChosen.Value, target, inflicter, TraumaType.OrganDamage, severity);
+                    var organSeverity = severity * GetOrganDamageAmp(target.Comp);
+                    var traumaEnt = AddTrauma(targetChosen.Value, target, inflicter, TraumaType.OrganDamage, organSeverity);
 
                     if (traumaEnt != EntityUid.Invalid
-                        && !TryChangeOrganDamageModifier(targetChosen.Value, severity, traumaEnt, "WoundableDamage"))
+                        && !TryChangeOrganDamageModifier(targetChosen.Value, organSeverity, traumaEnt, "WoundableDamage"))
                     {
-                        TryCreateOrganDamageModifier(targetChosen.Value, severity, traumaEnt, "WoundableDamage");
+                        TryCreateOrganDamageModifier(targetChosen.Value, organSeverity, traumaEnt, "WoundableDamage");
                     }
 
                     break;

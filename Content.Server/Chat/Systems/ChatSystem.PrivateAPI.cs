@@ -7,6 +7,8 @@ using Robust.Shared.Network;
 using Robust.Shared.Player;
 using Robust.Shared.Random;
 using Robust.Shared.Utility;
+using Content.Shared.Mobs;
+using Content.Shared.Mobs.Components;
 
 namespace Content.Server.Chat.Systems;
 
@@ -24,6 +26,11 @@ public sealed partial class ChatSystem
         )
     {
         if (!_actionBlocker.CanSpeak(source) && !ignoreActionBlocker)
+            return;
+
+        // softcrit can't speak aloud - but honor ignoreActionBlocker like the Speak->Whisper downgrade does,
+        // so forced speech (pain-say, admin/scripted) isn't silently dropped
+        if (!ignoreActionBlocker && TryComp<MobStateComponent>(source, out var mobState) && mobState.CurrentState == MobState.SoftCritical)
             return;
 
         var message = TransformSpeech(source, originalMessage);
@@ -101,6 +108,9 @@ public sealed partial class ChatSystem
     {
         if (!_actionBlocker.CanSpeak(source) && !ignoreActionBlocker)
             return;
+
+        if (channel != null && TryComp<MobStateComponent>(source, out var mobState) && mobState.CurrentState == MobState.SoftCritical)
+            channel = null;
 
         var message = TransformSpeech(source, FormattedMessage.RemoveMarkupOrThrow(originalMessage));
         if (message.Length == 0)

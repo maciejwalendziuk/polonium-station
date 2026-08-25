@@ -6,7 +6,10 @@ using Content.Shared.Body;
 using Content.Shared.Inventory;
 using Content.Shared.Inventory.VirtualItem;
 using Content.Shared.Mobs.Systems;
+using Content.Shared.Hands.EntitySystems;
 using Content.Shared.Movement.Systems;
+using Content.Shared.Weapons.Ranged.Components;
+using Content.Shared.Weapons.Ranged.Systems;
 using Content.Shared.Popups;
 using Content.Shared.Standing;
 using Content.Shared.Stunnable;
@@ -39,6 +42,9 @@ public sealed partial class TraumaSystem : EntitySystem
     [Dependency] private SharedPopupSystem _popup = default!;
     [Dependency] private AlertsSystem _alert = default!;
     [Dependency] private InitialBodySystem _initialBody = default!;
+    [Dependency] private SharedHandsSystem _hands = default!;
+    [Dependency] private SharedGunSystem _gun = default!;
+    [Dependency] private SharedTransformSystem _transform = default!;
 
     private string _brokenBonesAlertId = "BrokenBones";
     private string _legsCollapsedAlertId = "LegsCollapsed";

@@ -31,6 +31,13 @@ condition-body-unfinished-surgery-RightArm = • {$entity} ma niedokończoną op
 condition-body-unfinished-surgery-LeftLeg = • {$entity} ma niedokończoną operację w okolicy lewej nogi.
 condition-body-unfinished-surgery-RightLeg = • {$entity} ma niedokończoną operację w okolicy prawej nogi.
 
+condition-body-blocked-healing-Head = • Głowy {$entity} nie da się leczyć, dopóki nie naprawisz urazu.
+condition-body-blocked-healing-Chest = • Klatki piersiowej {$entity} nie da się leczyć, dopóki nie naprawisz urazu.
+condition-body-blocked-healing-LeftArm = • Lewego ramienia {$entity} nie da się leczyć, dopóki nie naprawisz urazu.
+condition-body-blocked-healing-RightArm = • Prawego ramienia {$entity} nie da się leczyć, dopóki nie naprawisz urazu.
+condition-body-blocked-healing-LeftLeg = • Lewej nogi {$entity} nie da się leczyć, dopóki nie naprawisz urazu.
+condition-body-blocked-healing-RightLeg = • Prawej nogi {$entity} nie da się leczyć, dopóki nie naprawisz urazu.
+
 condition-organ-damage-Normal = • {$organ}: stan w większości dobry.
 condition-organ-damage-Damaged = • {$organ}: uszkodzony.
 condition-organ-damage-Destroyed = • {$organ}: zniszczony...

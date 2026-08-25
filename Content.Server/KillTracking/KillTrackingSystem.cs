@@ -40,9 +40,25 @@ public sealed class KillTrackingSystem : EntitySystem
         component.LifetimeDamage[source] = damage + args.DamageDelta.GetTotal();
     }
 
+    private static bool MatchesKillState(MobState state, MobState killState)
+    {
+        if (killState == MobState.Critical)
+            return state is MobState.Critical or MobState.SoftCritical or MobState.HardCritical;
+        return state == killState;
+    }
+
+    private static int StateSeverity(MobState state) => state switch
+    {
+        MobState.SoftCritical or MobState.Critical => 1,
+        MobState.HardCritical => 2,
+        MobState.Dead => 3,
+        _ => 0, // Alive / Invalid
+    };
+
     private void OnMobStateChanged(EntityUid uid, KillTrackerComponent component, MobStateChangedEvent args)
     {
-        if (args.NewMobState != component.KillState || args.OldMobState >= args.NewMobState)
+        if (!MatchesKillState(args.NewMobState, component.KillState) ||
+            StateSeverity(args.OldMobState) >= StateSeverity(component.KillState))
             return;
 
         // impulse is the entity that did the finishing blow.

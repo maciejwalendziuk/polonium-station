@@ -13,6 +13,7 @@ using Content.Shared.FixedPoint;
 using Content.Shared.Mobs.Systems;
 using Content.Shared.Standing;
 using Robust.Shared.Network;
+using Robust.Shared.Prototypes;
 using Robust.Shared.Random;
 
 namespace Content.Shared._Shitmed.Body;
@@ -65,19 +66,32 @@ public sealed partial class BodyDamageBridgeSystem : EntitySystem
 
             var rolledTarget = RollHitLocation(ent.Owner, selectedTarget, args.Damage);
 
-            if (!LimbTargetMap.TryGetCategory(rolledTarget, out var category))
+            if (LimbTargetMap.TryGetCategory(rolledTarget, out var category)
+                && TryResolveOrganWithFallback(ent.Comp, category, out var organ))
+            {
+                ApplyBridgedDamage(organ, args.Damage, origin);
                 return;
+            }
 
-            if (!LimbTargetMap.TryGetOrganByCategory(EntityManager, ent.Comp, category, out var organ))
-                return;
-
-            AddComp<SkipOrganMobSyncComponent>(organ);
-            _damageable.TryChangeDamage(organ, args.Damage, ignoreResistances: true, interruptsDoAfters: false, origin: origin);
-            RemComp<SkipOrganMobSyncComponent>(organ);
+            ApplyToAllLimbs(ent.Comp, args.Damage, args.Origin);
             return;
         }
 
         ApplyToAllLimbs(ent.Comp, args.Damage, args.Origin);
+    }
+
+    private bool TryResolveOrganWithFallback(BodyComponent body, ProtoId<OrganCategoryPrototype> category, out EntityUid organ)
+    {
+        while (true)
+        {
+            if (LimbTargetMap.TryGetOrganByCategory(EntityManager, body, category, out organ))
+                return true;
+
+            if (!LimbTargetMap.TryGetParentCategory(category, out var parent))
+                return false;
+
+            category = parent;
+        }
     }
 
     private TargetBodyPart RollHitLocation(EntityUid victim, TargetBodyPart selectedTarget, DamageSpecifier damage)
@@ -113,19 +127,58 @@ public sealed partial class BodyDamageBridgeSystem : EntitySystem
         if (body.Organs is null)
             return;
 
-        // copy because TryChangeDamage can yank organs out during foreach
-        foreach (var contained in body.Organs.ContainedEntities.ToArray())
+        // Collect the present limb organs and their relative weights, tracking the heaviest
+        // (the torso) as the anchor that will soak the rounding remainder.
+        var limbs = new List<(EntityUid Organ, float Weight)>();
+        var totalWeight = 0f;
+        EntityUid anchor = default;
+        var anchorWeight = -1f;
+
+        foreach (var contained in body.Organs.ContainedEntities)
         {
             if (!TryComp<OrganComponent>(contained, out var organComp)
                 || organComp.Category is not { } category
                 || !LimbTargetMap.TryGetTarget(category, out var target))
                 continue;
 
-            var weighted = damage * GetPartDamageWeight(target);
-            AddComp<SkipOrganMobSyncComponent>(contained);
-            _damageable.TryChangeDamage(contained, weighted, ignoreResistances: true, interruptsDoAfters: false, origin: origin);
-            RemComp<SkipOrganMobSyncComponent>(contained);
+            var weight = GetPartDamageWeight(target);
+            limbs.Add((contained, weight));
+            totalWeight += weight;
+
+            if (weight > anchorWeight)
+            {
+                anchorWeight = weight;
+                anchor = contained;
+            }
         }
+
+        if (totalWeight <= 0f)
+            return;
+
+        var applied = new DamageSpecifier();
+        foreach (var (organ, weight) in limbs)
+        {
+            if (organ == anchor)
+                continue;
+
+            var weighted = damage * (weight / totalWeight);
+            applied += weighted;
+            ApplyBridgedDamage(organ, weighted, origin);
+        }
+
+        ApplyBridgedDamage(anchor, damage - applied, origin);
+    }
+
+    /// <summary>
+    /// Applies a bridge-originated damage delta to a single organ, marked so the organ->mob
+    /// auto-sync skips it (the mob already has this damage directly via its own InjurableComponent
+    /// reaction to the originating DamageDealtEvent - mirroring it back would double it).
+    /// </summary>
+    private void ApplyBridgedDamage(EntityUid organ, DamageSpecifier damage, EntityUid? origin)
+    {
+        AddComp<SkipOrganMobSyncComponent>(organ);
+        _damageable.TryChangeDamage(organ, damage, ignoreResistances: true, interruptsDoAfters: false, origin: origin);
+        RemComp<SkipOrganMobSyncComponent>(organ);
     }
 
     /// <summary>
@@ -163,12 +216,14 @@ public sealed partial class BodyDamageBridgeSystem : EntitySystem
         }
     }
 
+    // Relative shares only - ApplyToAllLimbs normalizes these to sum to 1.0 over the present
+    // limbs, so what matters is the ratio between parts (torso soaks the most), not the absolutes.
     private static float GetPartDamageWeight(TargetBodyPart target)
     {
         return target switch
         {
             TargetBodyPart.Head => 0.2f,
-            TargetBodyPart.Chest => 1.0f, // 100% damage
+            TargetBodyPart.Chest => 1.0f,
             TargetBodyPart.LeftArm or TargetBodyPart.RightArm => 0.3f,
             TargetBodyPart.LeftLeg or TargetBodyPart.RightLeg => 0.3f,
             _ => 0.2f,

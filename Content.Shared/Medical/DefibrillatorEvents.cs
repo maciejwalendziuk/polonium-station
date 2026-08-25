@@ -1,9 +1,38 @@
 using Content.Shared.Inventory;
+using Robust.Shared.Serialization;
 
 namespace Content.Shared.Medical;
 
 [ByRefEvent]
 public readonly record struct TargetDefibrillatedEvent(EntityUid User, Entity<DefibrillatorComponent> Defibrillator);
+
+/// <summary>
+/// A health-analyzer readout of whether a dead patient could be shocked back, and if not, why not.
+/// Mirrors <see cref="SharedDefibrillatorSystem.GetDefibrillationReadiness"/> - only ever set for a
+/// Dead target, since that is the only state a defib revival acts on.
+/// </summary>
+[Serializable, NetSerializable]
+public enum DefibrillationReadiness : byte
+{
+    /// Not a defib candidate (not dead) - no readout line.
+    None,
+
+    /// Rotten or unrevivable: the shock can never bring them back.
+    Hopeless,
+
+    /// Even the shock's asphyxiation heal can't drop them below the death threshold.
+    TooMuchDamage,
+
+    /// Revivable on damage, but there's no adrenaline reagent in their blood - the shock will
+    /// always fail until one is injected.
+    NeedsAdrenaline,
+
+    /// Revivable, but they'll come back right at the crit edge and won't be stable.
+    Risky,
+
+    /// Revivable - the shock has a real chance (still a roll, never a guarantee).
+    Ready,
+}
 
 public abstract class BeforeDefibrillatorZapsEvent : CancellableEntityEventArgs, IInventoryRelayEvent
 {

@@ -16,3 +16,9 @@ surgery-error-laying = They need to be lying down!
 surgery-error-step-interrupted = The operation failed.
 surgery-error-self-surgery = You can't perform surgery on yourself!
 surgery-part-damage-evaded = { $user } barely evaded!
+
+surgery-blocked-bone = Requires: Mend Bones
+surgery-blocked-organ = Requires: Heal Organs
+surgery-blocked-dismemberment = Requires: Fix Dismemberment Leftovers
+surgery-blocked-bleeding = Requires: stopping the bleeding
+surgery-blocked-generic = Blocked by an untreated trauma

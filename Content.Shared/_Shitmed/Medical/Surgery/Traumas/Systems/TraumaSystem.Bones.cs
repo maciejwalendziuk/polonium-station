@@ -4,6 +4,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+using System;
 using System.Linq;
 using Content.Shared._Shitmed.Body;
 using Content.Shared._Shitmed.Medical.Surgery.Traumas.Components;
@@ -12,6 +13,8 @@ using Content.Shared.Body;
 using Content.Shared.FixedPoint;
 using Content.Shared.Movement.Systems;
 using Content.Shared.Popups;
+using Content.Shared.Weapons.Ranged.Components;
+using Content.Shared.Weapons.Ranged.Events;
 using Content.Shared.Standing;
 using Robust.Shared.Audio;
 using Robust.Shared.Prototypes;
@@ -32,7 +35,11 @@ public partial class TraumaSystem
         SubscribeLocalEvent<BoneComponent, BoneIntegrityChangedEvent>(OnBoneIntegrityChanged);
         SubscribeLocalEvent<BodyComponent, RefreshMovementSpeedModifiersEvent>(OnRefreshLegSpeed);
         SubscribeLocalEvent<BodyComponent, StandAttemptEvent>(OnStandAttempt);
+        SubscribeLocalEvent<GunComponent, GunRefreshModifiersEvent>(OnGunRefreshArmSpread);
     }
+
+    /// <summary>How many degrees of extra spread a broken arm adds, capped across both arms.</summary>
+    private const double MaxArmSpreadPenaltyDegrees = 25;
 
     #region Event Handling
 
@@ -82,6 +89,58 @@ public partial class TraumaSystem
 
         if (organ.Category?.Id is "LegLeft" or "LegRight" or "FootLeft" or "FootRight" or "ArmLeft" or "ArmRight")
             _movementSpeed.RefreshMovementSpeedModifiers(body);
+
+        // A broken/mended arm changes aim - re-refresh any gun the mob is holding so the spread
+        // penalty (OnGunRefreshArmSpread) tracks the arm's current bone state in both directions.
+        if (organ.Category?.Id is "ArmLeft" or "ArmRight")
+        {
+            foreach (var held in _hands.EnumerateHeld(body))
+            {
+                if (HasComp<GunComponent>(held))
+                    _gun.RefreshModifiers(held);
+            }
+        }
+    }
+
+    /// <summary>
+    /// A broken arm worsens ranged aim: adds spread to a held gun, graded by each arm's bone state
+    /// and stacked across both arms up to <see cref="MaxArmSpreadPenaltyDegrees"/>.
+    /// </summary>
+    private void OnGunRefreshArmSpread(Entity<GunComponent> gun, ref GunRefreshModifiersEvent args)
+    {
+        // While held, the gun's transform parent is the wielder.
+        var holder = _transform.GetParentUid(gun.Owner);
+        if (!TryComp<BodyComponent>(holder, out var body))
+            return;
+
+        var penalty = GetArmSpreadPenalty((holder, body));
+        if (penalty <= Angle.Zero)
+            return;
+
+        args.MinAngle += penalty;
+        args.MaxAngle += penalty;
+    }
+
+    private Angle GetArmSpreadPenalty(Entity<BodyComponent> body)
+    {
+        var degrees = GetArmSpreadDegrees(body, "ArmLeft") + GetArmSpreadDegrees(body, "ArmRight");
+        return Angle.FromDegrees(Math.Min(degrees, MaxArmSpreadPenaltyDegrees));
+    }
+
+    private double GetArmSpreadDegrees(Entity<BodyComponent> body, ProtoId<OrganCategoryPrototype> category)
+    {
+        if (!LimbTargetMap.TryGetOrganByCategory(EntityManager, body, category, out var organ)
+            || !TryComp<WoundableComponent>(organ, out var woundable)
+            || !TryGetBoneSeverity(woundable, out var severity))
+            return 0;
+
+        return severity switch
+        {
+            BoneSeverity.Damaged => 4,
+            BoneSeverity.Cracked => 8,
+            BoneSeverity.Broken => 15,
+            _ => 0,
+        };
     }
 
     private void OnRefreshLegSpeed(Entity<BodyComponent> body, ref RefreshMovementSpeedModifiersEvent args)

@@ -1,0 +1,13 @@
+lathe-category-biosynth-arachnid = Pajęczak
+lathe-category-biosynth-diona = Diona
+lathe-category-biosynth-dwarf = Krasnolud
+lathe-category-biosynth-felinid = Felinid
+lathe-category-biosynth-gingerbread = Piernik
+lathe-category-biosynth-harpy = Harpia
+lathe-category-biosynth-human = Człowiek
+lathe-category-biosynth-moth = Ćma
+lathe-category-biosynth-reptilian = Reptilianin
+lathe-category-biosynth-rodentia = Gryzoń
+lathe-category-biosynth-thaven = Tejwan
+lathe-category-biosynth-vox = Voks
+lathe-category-biosynth-vulpkanin = Wulp

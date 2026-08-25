@@ -171,7 +171,7 @@ public sealed partial class DamageOverlay : Overlay
             _oldPainLevel = PainLevel;
         }
 
-        level = State != MobState.Critical ? _oldOxygenLevel : 1f;
+        level = State is MobState.Critical or MobState.HardCritical or MobState.SoftCritical ? 1f : _oldOxygenLevel;
 
         if (level > 0f)
         {
